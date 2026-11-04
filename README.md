@@ -185,7 +185,7 @@ That approach later became useful when troubleshooting embedded hardware, commun
 The complete synthesizable VHDL implementation is available in:
 
 ```text
-src/Project3.vhd
+src/alu.vhd
 ```
 
 The design contains:
