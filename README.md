@@ -1,37 +1,25 @@
 # 8-Bit FPGA Arithmetic Logic Unit
 
-An **8-bit Arithmetic Logic Unit (ALU)** implemented in **VHDL** and deployed on an **Intel/Altera DE10-Lite FPGA development board**.
+An 8-bit Arithmetic Logic Unit written in **VHDL** and implemented on an **Intel/Altera DE10-Lite FPGA development board**.
 
-## About the Project
+I built this project to move beyond isolated combinational-logic exercises and create a more complete digital system with a datapath, control logic, registered inputs, status flags, and physical user interfaces.
 
-The goal of this project was to move beyond basic combinational logic and build a more complete digital system resembling a simplified processor datapath.
+One of the main design constraints was the limited number of switches available on the board. There were not enough physical inputs to enter two 8-bit operands and an opcode at the same time, so I designed a finite state machine that reuses the switches. The user enters Operand A, advances the system, enters Operand B, and then selects the operation. This turned a simple ALU into a larger sequential system that coordinated inputs, internal state, computation, and display output.
 
-I wanted to gain hands-on experience with:
-
-- Designing arithmetic and logic functions in VHDL
-- Developing a finite state machine to control system behavior
-- Working with signed and unsigned binary arithmetic
-- Implementing processor-style status flags
-- Interfacing digital logic with physical FPGA inputs and outputs
-- Developing a repeatable verification and debugging process
-- Understanding how a design moves from VHDL into physical FPGA hardware
-
-A major challenge was working around the limited number of physical switches on the DE10-Lite. Rather than requiring separate switches for both operands and the opcode, I used an FSM to sequentially load each input into internal registers before executing the selected operation.
+The complete synthesizable implementation is available in [`src/alu.vhd`](src/alu.vhd).
 
 ---
 
 ## System Architecture
 
-The system uses the DE10-Lite switches to enter two 8-bit operands and a 4-bit opcode.
-
-A pushbutton advances the finite state machine through the input and execution process.
+The design is organized around two operand registers, an 8-bit ALU, control logic, status-flag generation, and output logic for the DE10-Lite LEDs and seven-segment displays.
 
 ```text
        DE10-Lite Switches
                |
                v
       +------------------+
-      | Input / FSM      |
+      | Input and FSM    |
       | Control Logic    |
       +------------------+
                |
@@ -48,7 +36,7 @@ A pushbutton advances the finite state machine through the input and execution p
       +------------------+
           |          |
           v          v
-       Result      Flags
+       Result      Status Flags
           |
           v
       +------------------+
@@ -56,17 +44,17 @@ A pushbutton advances the finite state machine through the input and execution p
       +------------------+
           |          |
           v          v
-        LEDs    7-Segment
-                 Display
+        LEDs     7-Segment
+                   Displays
 ```
+
+The ALU performs the selected operation on the stored operands. The result and status flags are then passed to the board-level output logic, where they can be observed through the LEDs and seven-segment displays.
 
 ---
 
-## Finite State Machine
+## Reusing the Physical Inputs
 
-Because the DE10-Lite does not provide enough switches to enter both 8-bit operands and the opcode simultaneously, the system reuses the physical inputs.
-
-The FSM sequences the user through:
+The DE10-Lite did not have enough switches to dedicate separate physical inputs to both operands and the opcode. Rather than reducing the operand width, I used an FSM to capture the inputs sequentially.
 
 ```text
 Idle
@@ -78,168 +66,86 @@ Load Operand A
 Load Operand B
   |
   v
-Select Opcode / Operate
+Select Opcode / Execute
   |
   v
 Idle
 ```
 
-A button edge-detection mechanism prevents a single physical button press from unintentionally advancing through multiple states.
+A pushbutton advances the system through these states. Button edge detection prevents one physical press from being interpreted as multiple state transitions.
 
-This was one of the first projects where I used an FSM to coordinate multiple parts of a larger digital system instead of implementing isolated logic functions.
+This was one of my first projects where an FSM controlled a larger digital system instead of a single isolated behavior. The controller had to determine when each operand should be captured, when the opcode should be interpreted, and when the result should be presented to the user.
 
 ---
 
 ## ALU Operations
 
-The ALU accepts two 8-bit operands and supports arithmetic, logical, shift, and comparison functions.
+The ALU accepts two 8-bit operands and supports arithmetic, bitwise, shift, pass-through, and comparison operations.
 
-### Arithmetic
+| Category | Operations |
+| --- | --- |
+| Arithmetic | Addition, subtraction, increment, decrement |
+| Bitwise logic | AND, OR, XOR, NOT |
+| Shifts | Logical shift left, logical shift right, arithmetic shift right |
+| Data movement | Pass Operand A |
+| Comparison | Compare Operand A and Operand B |
 
-- Addition
-- Subtraction
-- Increment
-- Decrement
+For arithmetic operations, the design uses a 9-bit intermediate value where needed so information such as carry is available before the final result is reduced to eight bits.
 
-### Bitwise Logic
-
-- AND
-- OR
-- XOR
-- NOT
-
-### Shift Operations
-
-- Logical shift left
-- Logical shift right
-- Arithmetic shift right
-
-### Additional Operations
-
-- Pass Operand A
-- Compare Operand A and Operand B
-
-For arithmetic operations, a 9-bit intermediate value is used where appropriate so that information such as carry can be retained before the final 8-bit result is stored.
+The design also generates processor-style status information, including carry, parity, overflow, zero, negative, and positive or comparison-related conditions. Implementing these flags made the distinction between signed and unsigned interpretation much more concrete. The same eight physical bits can represent different values and produce different conditions depending on how the operation interprets them.
 
 ---
 
-## Processor-Style Status Flags
+## Signed Results and Display Logic
 
-The design generates several status flags based on the result of an operation:
+The ALU result is interpreted as an 8-bit two's-complement signed value. To make that value readable on the physical board, the output logic converts the binary result into decimal digits for the seven-segment displays.
 
-- **Carry**
-- **Parity**
-- **Overflow**
-- **Zero**
-- **Negative**
-- **Positive / Greater-than conditions**
+The display path determines whether the result is negative, obtains its magnitude, separates that magnitude into decimal digits, and maps each digit to the appropriate seven-segment pattern. The sign and decimal value are then shown on the DE10-Lite.
 
-Implementing these flags helped reinforce the differences between signed and unsigned arithmetic and how processors retain information about the result of an operation beyond the result value itself.
-
----
-
-## Signed Output and Display Logic
-
-The ALU result is interpreted as an 8-bit signed value using two's-complement representation.
-
-For the physical DE10-Lite display, the result is converted into a human-readable decimal representation.
-
-The display subsystem:
-
-1. Determines whether the result is negative
-2. Converts the result to its absolute magnitude
-3. Separates the value into decimal digits
-4. Converts each digit into the appropriate seven-segment pattern
-5. Displays the sign and result on the DE10-Lite
-
-This portion of the project became particularly useful during debugging because it demonstrated the difference between **correct internal computation** and **correct presentation of that computation to the user**.
+This part of the project was more involved than simply connecting the ALU result directly to LEDs. It required translating an internal binary representation into an output that was useful to a person, and it created a clear boundary between the computational logic and the presentation logic.
 
 ---
 
 ## Verification and Debugging
 
-One of the most valuable parts of this project was learning to debug the system systematically.
+The most valuable part of this project was not implementing another arithmetic operation. It was learning how to isolate a problem in a digital system.
 
-During development, the seven-segment displays initially produced incorrect output.
+During development, the seven-segment displays initially showed incorrect output. Because the display was the visible result of the system, my first suspicion was that the ALU itself was producing the wrong value. Manually entering operands and opcodes on the board would have been a slow way to test that assumption, and it would not have made the internal signals easy to observe.
 
-My first suspicion was that the ALU itself was calculating the wrong results. Manually entering every possible opcode and comparing outputs, however, would have been slow and would not have efficiently isolated the problem.
+Instead, I used a VHDL testbench and simulation during development to apply inputs and opcodes while observing the ALU outputs independently of the physical display path. The simulation showed that the ALU computation was behaving correctly, which narrowed the problem to logic farther downstream in the display and output path.
 
-Instead, I developed a simulation-based verification approach using a **VHDL testbench**.
+That experience changed how I approached debugging:
 
-The testbench allowed different inputs and opcodes to be applied systematically while observing the internal ALU outputs independently from the physical display hardware.
+> A visible failure does not necessarily identify the subsystem that caused it. Break the system into functional blocks, define the expected behavior of each block, and verify them independently.
 
-This showed that the ALU computation was behaving correctly and allowed the problem to be isolated farther downstream in the display/output logic.
-
-### Debugging lesson
-
-This project taught me an engineering principle that I now apply to hardware and embedded-system debugging:
-
-> **A visible failure does not necessarily identify the subsystem causing the failure. Break the system into functional blocks, determine the expected behavior of each block, and verify them independently.**
-
-That approach later became useful when troubleshooting embedded hardware, communication interfaces, and custom PCBs.
+The testbench used during development is not currently included in this repository, so the repository should not be treated as containing a complete automated verification environment. The synthesizable design itself is available in `src/alu.vhd`.
 
 ---
 
-## Source Code
+## Implementation
 
-The complete synthesizable VHDL implementation is available in:
+The design was developed in **VHDL**, synthesized with **Intel Quartus**, and deployed to the **MAX 10 FPGA** on the DE10-Lite.
 
-```text
-src/alu.vhd
-```
+The implementation in `src/alu.vhd` contains the FSM, operand registers, ALU operations, status-flag generation, button edge detection, signed-result handling, decimal digit extraction, seven-segment encoding, and board-level output interfaces.
 
-The design contains:
-
-- FSM state control
-- Operand registers
-- ALU operations
-- Status-flag generation
-- Button edge detection
-- Signed-result handling
-- Decimal digit extraction
-- Seven-segment encoding
-- DE10-Lite output interfaces
-
----
-
-## What I Learned
-
-This project gave me practical experience with:
-
-- **VHDL**
-- **FPGA development**
-- **Finite state machines**
-- **Digital datapath design**
-- **Registers and sequential logic**
-- **Combinational logic**
-- **Two's-complement arithmetic**
-- **Carry and overflow behavior**
-- **Status flags**
-- **Edge detection**
-- **Seven-segment displays**
-- **Simulation and testbenches**
-- **Waveform-based debugging**
-- **System-level decomposition**
-- **Physical FPGA implementation**
-
-More importantly, the project helped shift my approach from simply writing logic that should work toward thinking about **how a digital system can be structured, tested, and debugged when it does not work as expected**.
+Keeping these functions together made sense while I was learning how the complete system worked, but reviewing the project now also makes the value of clearer module boundaries much more obvious.
 
 ---
 
 ## What I Would Improve Today
 
-This was an academic project and there are several improvements I would make if I redesigned it with my current hardware and verification experience.
+This project represents an earlier stage of my FPGA experience, and there are several changes I would make now. I see those changes less as problems with the original assignment and more as evidence of how my approach to digital design and verification has developed.
 
-### 1. Modernize the VHDL arithmetic
+### Use Standard Numeric Types
 
-The original implementation uses:
+The original implementation uses the older arithmetic packages:
 
 ```vhdl
 STD_LOGIC_UNSIGNED
 STD_LOGIC_ARITH
 ```
 
-A future revision would use the IEEE-standard:
+I would now use:
 
 ```vhdl
 use IEEE.NUMERIC_STD.ALL;
@@ -247,69 +153,45 @@ use IEEE.NUMERIC_STD.ALL;
 
 with explicit `signed` and `unsigned` types.
 
-This would make arithmetic behavior more explicit and improve portability and readability.
+That would make the intended numerical interpretation of each signal clearer, reduce ambiguity around conversions, and make the arithmetic more portable between tools. This is particularly important in an ALU because the design intentionally works with both signed and unsigned behavior.
 
-### 2. Break the design into clearer modules
+### Separate the Functional Blocks
 
-Instead of keeping much of the system in a single architecture, I would separate the design into functional modules such as:
+Much of the original system is contained within a single VHDL architecture. If I redesigned it, I would separate the major responsibilities into clearer modules:
 
 ```text
-ALU Core
+Input Interface
 FSM Controller
+Operand Registers
+ALU Core
 Flag Generator
 Display Controller
-Input Interface
 ```
 
-This would make each subsystem easier to independently verify and reuse.
+That structure would make the datapath and control logic easier to understand. It would also allow the ALU core, flag logic, and display subsystem to be verified independently rather than requiring the entire design to be exercised at once.
 
-### 3. Develop a self-checking testbench
+The debugging experience already showed why those boundaries matter: the ALU and the display path were separate functional problems even though they were implemented as part of the same system.
 
-Rather than relying primarily on waveform inspection, I would create a testbench that automatically:
+### Build a Self-Checking Verification Environment
 
-- Applies test vectors
-- Calculates the expected result
-- Compares expected and actual outputs
-- Tests arithmetic edge cases
-- Verifies status flags
-- Reports pass/fail results
+Simulation helped me isolate the display issue, but today I would go farther and create a self-checking testbench from the beginning.
 
-### 4. Parameterize the datapath
+Instead of relying primarily on waveform inspection, the testbench would apply representative and edge-case inputs, calculate the expected result, compare it against the design output, and report failures automatically. I would verify the status flags as carefully as the result itself, especially around signed overflow, unsigned carry, zero, negative values, and comparison boundaries.
 
-The original design is fixed at 8 bits.
+I would also keep that verification code in the repository so the design could be evaluated and reproduced without relying only on the physical FPGA board.
 
-A future version could use a generic data width so the same ALU could be synthesized as an 8-bit, 16-bit, or wider architecture.
+### Make the Datapath Easier to Extend
 
-### 5. Improve the input interface
+The original design is fixed at eight bits. A future version could define the datapath width with a VHDL generic, allowing the same ALU structure to be synthesized at different widths.
 
-The FSM was necessary because the physical switch count limited how operands could be entered.
-
-A future version could use **UART** to send operands and opcodes from a computer, allowing automated testing and eliminating the physical-switch limitation.
+I would treat parameterization as a secondary improvement rather than the main goal. The first priority would be making the eight-bit implementation modular, readable, and thoroughly verified. Once those foundations were in place, extending the width would be much less risky.
 
 ---
 
-## Future Direction
+## What I Took Away From the Project
 
-This project gave me my first substantial experience building and debugging a larger FPGA-based digital system.
+This project was my first substantial experience combining a datapath, finite state machine, registered inputs, arithmetic behavior, status flags, and physical FPGA interfaces into one system.
 
-Future FPGA projects will build on this foundation by moving toward:
+The ALU itself was important, but the larger lesson came from everything around it: working within hardware constraints, coordinating sequential behavior, presenting an internal result through a physical interface, and using simulation to determine which subsystem was actually failing.
 
-- Streaming digital data
-- FIR filtering
-- FIFO buffering
-- Digital signal processing
-- Hardware/software interfaces
-- Automated verification
-- FPGA-based signal-processing architectures
-
-The long-term goal is to apply the digital-design and verification techniques learned here to more advanced **embedded, signal-processing, and RF-oriented systems**.
-
----
-
-## Platform
-
-- **FPGA:** Intel/Altera MAX 10
-- **Development Board:** DE10-Lite
-- **HDL:** VHDL
-- **Development Environment:** Intel Quartus
-- **Datapath Width:** 8 bits
+It helped shift my mindset from writing logic that *should* work toward designing systems that can be **understood, verified, and debugged when they do not behave as expected**.
